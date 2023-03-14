@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 	"net"
 	"reflect"
 	"regexp"
@@ -34,6 +35,7 @@ import (
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/cluster-api-provider-azure/feature"
 	webhookutils "sigs.k8s.io/cluster-api-provider-azure/util/webhook"
+	capi "sigs.k8s.io/cluster-api/api/v1alpha4"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	capifeature "sigs.k8s.io/cluster-api/feature"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -96,6 +98,25 @@ func (m *AzureManagedControlPlane) ValidateCreate(client client.Client) error {
 			field.NewPath("spec"),
 			"can be set only if the Cluster API 'MachinePool' feature flag is enabled",
 		)
+	}
+
+	labels := m.GetLabels()
+	clusterName, ok := labels["cluster.x-k8s.io/cluster-name"]
+	if !ok {
+		return nil
+	}
+
+	cluster := &capi.Cluster{}
+	err := client.Get(context.TODO(), types.NamespacedName{
+		Namespace: m.Namespace,
+		Name:      clusterName,
+	}, cluster)
+	if err != nil {
+		return err
+	}
+
+	if cluster.Spec.Paused == false {
+		return nil
 	}
 
 	if m.Spec.ControlPlaneEndpoint.Host != "" {
